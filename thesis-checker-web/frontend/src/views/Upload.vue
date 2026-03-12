@@ -1,0 +1,184 @@
+<template>
+  <div class="upload-container">
+    <el-card class="upload-card">
+      <h2 class="page-title">上传论文</h2>
+      
+      <el-form :model="uploadForm" label-width="100px">
+        <el-form-item label="论文标题" prop="title" :rules="[
+          { required: true, message: '请输入论文标题', trigger: 'blur' }
+        ]">
+          <el-input 
+            v-model="uploadForm.title" 
+            placeholder="请输入论文标题"
+            style="width: 500px"
+          />
+        </el-form-item>
+        
+        <el-form-item label="上传文件" prop="file" :rules="[
+          { required: true, message: '请选择论文文件', trigger: 'change' }
+        ]">
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :show-file-list="true"
+            :limit="1"
+            accept=".docx,.pdf,.md"
+            :on-change="handleFileChange"
+            :on-exceed="handleExceed"
+            drag
+            style="width: 500px"
+          >
+            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <div class="el-upload__text">
+              将文件拖到此处，或<em>点击上传</em>
+            </div>
+            <template #tip>
+              <div class="el-upload__tip">
+                支持 .docx, .pdf, .md 格式，文件大小不超过50MB
+              </div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button 
+            type="primary" 
+            @click="handleUpload" 
+            :loading="uploading"
+            size="large"
+          >
+            上传并开始检查
+          </el-button>
+          <el-button @click="handleReset" size="large" style="margin-left: 10px">
+            重置
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card class="instructions-card">
+      <h3>上传说明</h3>
+      <el-descriptions :column="1" border>
+        <el-descriptions-item label="支持格式">
+          <el-tag type="success">.docx</el-tag>
+          <el-tag type="success">.pdf</el-tag>
+          <el-tag type="success">.md</el-tag>
+          <p style="margin-top: 10px">推荐使用 .docx 格式，可以精确定位问题位置</p>
+        </el-descriptions-item>
+        <el-descriptions-item label="检查内容">
+          <ul>
+            <li>📄 页面格式：页边距、行距、页码、页眉页脚</li>
+            <li>🔤 字体格式：标题层级、字体、字号、加粗规范</li>
+            <li>📝 段落格式：首行缩进、对齐方式、段间距</li>
+            <li>📚 引用格式：参考文献、脚注、引用标注</li>
+            <li>📊 图表格式：图片表格编号、标题、图例规范</li>
+            <li>🏗️ 内容结构：章节完整性、逻辑连贯性</li>
+          </ul>
+        </el-descriptions-item>
+        <el-descriptions-item label="检查时间">
+          <p>根据论文长度，检查时间通常需要1-5分钟，请耐心等待</p>
+          <p>检查完成后会自动跳转到报告页面</p>
+        </el-descriptions-item>
+      </el-descriptions>
+    </el-card>
+  </div>
+</template>
+
+<script setup>
+import { ref, reactive } from 'vue'
+import { useRouter } from 'vue-router'
+import { uploadThesis, checkThesis } from '@/api/thesis'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
+
+const router = useRouter()
+const uploadRef = ref()
+const uploading = ref(false)
+
+const uploadForm = reactive({
+  title: '',
+  file: null
+})
+
+const handleFileChange = (uploadFile) => {
+  uploadForm.file = uploadFile.raw
+}
+
+const handleExceed = () => {
+  ElMessage.warning('只能上传一个文件')
+}
+
+const handleReset = () => {
+  uploadForm.title = ''
+  uploadForm.file = null
+  uploadRef.value?.clearFiles()
+}
+
+const handleUpload = async () => {
+  if (!uploadForm.title.trim()) {
+    ElMessage.error('请输入论文标题')
+    return
+  }
+  if (!uploadForm.file) {
+    ElMessage.error('请选择要上传的文件')
+    return
+  }
+
+  uploading.value = true
+  try {
+    // 上传文件
+    const uploadRes = await uploadThesis(uploadForm.title, uploadForm.file)
+    ElMessage.success('上传成功，开始检查论文...')
+
+    // 开始检查
+    await checkThesis(uploadRes.id)
+    
+    ElMessageBox.alert(
+      '论文检查完成，点击确定查看报告',
+      '检查完成',
+      {
+        confirmButtonText: '确定',
+        type: 'success'
+      }
+    ).then(() => {
+      router.push(`/report/${uploadRes.id}`)
+    })
+  } catch (error) {
+    console.error('上传或检查失败', error)
+  } finally {
+    uploading.value = false
+  }
+}
+</script>
+
+<style scoped>
+.upload-container {
+  padding: 20px;
+}
+
+.upload-card {
+  margin-bottom: 20px;
+}
+
+.page-title {
+  margin: 0 0 20px 0;
+  font-size: 24px;
+  color: #303133;
+}
+
+.instructions-card h3 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #303133;
+}
+
+ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+li {
+  margin-bottom: 5px;
+  line-height: 1.6;
+}
+</style>
