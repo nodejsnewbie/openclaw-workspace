@@ -88,7 +88,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { getThesisReport } from '@/api/thesis'
+import { getReport } from '@/api/thesis'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 
@@ -132,7 +132,7 @@ const contentIssues = computed(() => {
 
 const loadReport = async () => {
   try {
-    const res = await getThesisReport(thesisId)
+    const res = await getReport(thesisId)
     reportData.value = res
   } catch (error) {
     ElMessage.error('加载报告失败')

@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: thesis-checker-mongodb
+    restart: always
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    networks:
+      - thesis-network
+
+  backend:
+    build: ./backend
+    container_name: thesis-checker-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./frontend/dist:/app/frontend/dist
+    environment:
+      - MONGODB_URL=mongodb://admin:password123@mongodb:27017
+      - DATABASE_NAME=thesis_checker
+      - SECRET_KEY=your-production-secret-key-here
+    depends_on:
+      - mongodb
+    networks:
+      - thesis-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  thesis-network:
+    driver: bridge
