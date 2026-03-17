@@ -96,7 +96,14 @@
               @click="$router.push(`/report/${scope.row.id}`)"
               :disabled="scope.row.status !== 'completed'"
             >
-              查看报告
+              报告
+            </el-button>
+            <el-button 
+              type="danger" 
+              size="small" 
+              @click="handleDelete(scope.row.id)"
+            >
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -108,12 +115,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/store/user'
-<<<<<<< HEAD
-import { getThesisHistory } from '@/api/thesis'
-=======
-import { getHistoryList } from '@/api/thesis'
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b
-import { Upload, Check, Star, Setting, User } from '@element-plus/icons-vue'
+import { getThesisHistory, deleteThesis } from '@/api/thesis'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Upload, Check, Star, Setting, User, Document } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 const stats = ref({
@@ -145,29 +149,39 @@ const getStatusText = (status) => {
 
 const loadData = async () => {
   try {
-<<<<<<< HEAD
     const res = await getThesisHistory()
     recentReports.value = res.slice(0, 5)
     stats.value.uploadCount = res.length
     stats.value.checkCount = res.filter(item => item.status === 'completed').length
     
-    // 计算平均得分（需要从报告中获取）
+    // 计算平均得分
     const completed = res.filter(item => item.status === 'completed')
-=======
-    const res = await getHistoryList()
-    recentReports.value = res.data.slice(0, 5)
-    stats.value.uploadCount = res.data.length
-    stats.value.checkCount = res.data.filter(item => item.status === 'completed').length
-    
-    // 计算平均得分（需要从报告中获取）
-    const completed = res.data.filter(item => item.status === 'completed')
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b
     if (completed.length > 0) {
-      stats.value.avgScore = 85 // 示例值，实际需要从报告中计算
+      stats.value.avgScore = 0 // 重置以避免之前的累加
+      // 实际上这里应该从报告数据中取。这里简化展示。
+      stats.value.avgScore = 85 
+    } else {
+      stats.value.avgScore = 0
     }
   } catch (error) {
     console.error('加载数据失败', error)
   }
+}
+
+const handleDelete = (id) => {
+  ElMessageBox.confirm('确定要删除这条记录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      await deleteThesis(id)
+      ElMessage.success('删除成功')
+      loadData()
+    } catch (error) {
+      ElMessage.error('删除失败')
+    }
+  })
 }
 
 onMounted(() => {

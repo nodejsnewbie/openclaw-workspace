@@ -5,12 +5,12 @@
       <div v-for="item in historyList" :key="item.id" class="history-item">
         <div class="item-info">
           <h3>{{ item.title }}</h3>
-          <p>{{ item.createTime }}</p>
-          <span :class="['status', item.status]">{{ item.statusText }}</span>
+          <p>{{ item.created_at }}</p>
+          <span :class="['status', item.status]">{{ getStatusText(item.status) }}</span>
         </div>
         <div class="item-actions">
-          <button @click="viewReport(item.id)" class="btn btn-primary">查看报告</button>
-          <button @click="deleteItem(item.id)" class="btn btn-danger">删除</button>
+          <el-button @click="viewReport(item.id)" type="primary" :disabled="item.status !== 'completed'">查看报告</el-button>
+          <el-button @click="deleteItem(item.id)" type="danger">删除</el-button>
         </div>
       </div>
     </div>
@@ -24,7 +24,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getHistoryList, deleteHistory } from '@/api/thesis'
+import { getThesisHistory, deleteThesis } from '@/api/thesis'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
 const historyList = ref([])
@@ -33,12 +34,22 @@ onMounted(() => {
   fetchHistoryList()
 })
 
+const getStatusText = (status) => {
+  const statusMap = {
+    uploaded: '已上传',
+    checking: '检查中',
+    completed: '已完成',
+    failed: '检查失败'
+  }
+  return statusMap[status] || status
+}
+
 const fetchHistoryList = async () => {
   try {
-    const res = await getHistoryList()
-    historyList.value = res.data
+    const res = await getThesisHistory()
+    historyList.value = res
   } catch (error) {
-    console.error('获取历史记录失败:', error)
+    ElMessage.error('获取历史记录失败')
   }
 }
 
@@ -46,15 +57,20 @@ const viewReport = (id) => {
   router.push(`/report/${id}`)
 }
 
-const deleteItem = async (id) => {
-  if (confirm('确定要删除这条记录吗？')) {
+const deleteItem = (id) => {
+  ElMessageBox.confirm('确定要删除这条检查记录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
     try {
-      await deleteHistory(id)
+      await deleteThesis(id)
+      ElMessage.success('删除成功')
       fetchHistoryList()
     } catch (error) {
-      console.error('删除失败:', error)
+      ElMessage.error('删除失败')
     }
-  }
+  })
 }
 </script>
 
@@ -102,12 +118,12 @@ const deleteItem = async (id) => {
   font-weight: 500;
 }
 
-.status.success {
+.status.completed {
   background: #f6ffed;
   color: #52c41a;
 }
 
-.status.processing {
+.status.checking {
   background: #e6f7ff;
   color: #1890ff;
 }
@@ -115,6 +131,11 @@ const deleteItem = async (id) => {
 .status.failed {
   background: #fff2f0;
   color: #ff4d4f;
+}
+
+.status.uploaded {
+  background: #f5f5f5;
+  color: #8c8c8c;
 }
 
 .item-actions {

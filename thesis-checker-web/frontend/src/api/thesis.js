@@ -1,6 +1,5 @@
 import request from '@/utils/request'
 
-<<<<<<< HEAD
 export function uploadThesis(title, file) {
   const formData = new FormData()
   formData.append('title', title)
@@ -8,22 +7,18 @@ export function uploadThesis(title, file) {
   return request({
     url: '/thesis/upload',
     method: 'post',
-    data: formData,
-=======
-// 上传论文
-export function uploadThesis(data) {
-  return request({
-    url: '/thesis/upload',
-    method: 'post',
-    data,
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    }
+    data: formData
+    // NOTE: 不手动设置 Content-Type，让 axios 自动带上正确的带 boundary 的值
   })
 }
 
-<<<<<<< HEAD
+export function getThesisInfo(thesisId) {
+  return request({
+    url: `/thesis/${thesisId}`,
+    method: 'get'
+  })
+}
+
 export function checkThesis(thesisId) {
   return request({
     url: `/thesis/check/${thesisId}`,
@@ -39,39 +34,22 @@ export function getThesisReport(thesisId) {
 }
 
 export function getThesisHistory() {
-=======
-// 获取历史记录
-export function getHistoryList() {
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b
   return request({
     url: '/thesis/history',
     method: 'get'
   })
 }
-<<<<<<< HEAD
-=======
 
-// 获取检查报告
-export function getReport(id) {
+export function downloadThesisReport(thesisId) {
   return request({
-    url: `/thesis/report/${id}`,
-    method: 'get'
+    url: `/thesis/report/${thesisId}/download`,
+    method: 'get',
+    responseType: 'blob'
   })
 }
-
-// 检查论文
-export function checkThesis(id) {
+export function deleteThesis(thesisId) {
   return request({
-    url: `/thesis/check/${id}`,
-    method: 'post'
-  })
-}
-
-// 删除历史记录
-export function deleteHistory(id) {
-  return request({
-    url: `/thesis/history/${id}`,
+    url: `/thesis/${thesisId}`,
     method: 'delete'
   })
 }
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b

@@ -24,7 +24,7 @@ export function register(data) {
 
 export function getUserProfile() {
   return request({
-    url: '/users/me/',
+    url: '/auth/profile',
     method: 'get'
   })
 }

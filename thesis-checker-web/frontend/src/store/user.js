@@ -6,7 +6,8 @@ export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem('token') || '',
     userInfo: null,
-    isAdmin: false
+    // NOTE: isAdmin 同样从 localStorage 恢复，防止页面刷新后状态丢失
+    isAdmin: localStorage.getItem('isAdmin') === 'true'
   }),
   
   getters: {
@@ -21,6 +22,7 @@ export const useUserStore = defineStore('user', {
         this.token = res.access_token
         this.isAdmin = res.is_admin
         localStorage.setItem('token', res.access_token)
+        localStorage.setItem('isAdmin', String(res.is_admin))
         
         await this.getUserInfo()
         ElMessage.success('登录成功')
@@ -36,6 +38,8 @@ export const useUserStore = defineStore('user', {
         const res = await getUserProfile()
         this.userInfo = res
         this.isAdmin = res.is_admin
+        // NOTE: 同步写入 localStorage，确保页面刷新后仍可正确识别管理员身份
+        localStorage.setItem('isAdmin', String(res.is_admin))
         return Promise.resolve(res)
       } catch (error) {
         this.logout()
@@ -48,6 +52,7 @@ export const useUserStore = defineStore('user', {
       this.userInfo = null
       this.isAdmin = false
       localStorage.removeItem('token')
+      localStorage.removeItem('isAdmin')
       ElMessage.success('已退出登录')
     }
   }

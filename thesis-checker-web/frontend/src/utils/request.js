@@ -3,8 +3,8 @@ import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
-// API 地址配置 (HTTPS)
-const baseURL = 'https://106.53.163.37:8000'
+// API 地址配置 (本地开发)
+const baseURL = 'http://localhost:8000/api'
 console.log('API Base URL:', baseURL)
 
 const service = axios.create({
