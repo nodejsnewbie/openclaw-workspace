@@ -20,7 +20,7 @@ export function register(data) {
 
 export function getUserProfile() {
   return request({
-    url: '/auth/profile',
+    url: '/users/me/',
     method: 'get'
   })
 }
