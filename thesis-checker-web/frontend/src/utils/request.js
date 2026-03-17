@@ -3,8 +3,12 @@ import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
+// 直接指定API地址
+const baseURL = 'http://106.53.163.37:8000'
+console.log('API Base URL:', baseURL)
+
 const service = axios.create({
-  baseURL: '/api',
+  baseURL: baseURL,
   timeout: 30000
 })
 
@@ -14,6 +18,7 @@ service.interceptors.request.use(
     if (userStore.token) {
       config.headers.Authorization = `Bearer ${userStore.token}`
     }
+    console.log('Request:', config.baseURL + config.url, config.data)
     return config
   },
   error => {
@@ -23,10 +28,13 @@ service.interceptors.request.use(
 
 service.interceptors.response.use(
   response => {
+    console.log('Response:', response.data)
     return response.data
   },
   error => {
+    console.error('Error:', error)
     if (error.response) {
+      console.error('Response error:', error.response.data)
       switch (error.response.status) {
         case 401:
           ElMessage.error('登录已过期，请重新登录')
@@ -47,6 +55,7 @@ service.interceptors.response.use(
           ElMessage.error(error.response.data?.detail || '请求失败')
       }
     } else {
+      console.error('Network error:', error.message)
       ElMessage.error('网络连接失败，请检查网络')
     }
     return Promise.reject(error)
