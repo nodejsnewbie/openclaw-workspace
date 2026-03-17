@@ -3,8 +3,8 @@ import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
-// 直接指定API地址
-const baseURL = 'http://106.53.163.37:8000'
+// 使用环境变量配置 API 地址
+const baseURL = __API_BASE_URL__
 console.log('API Base URL:', baseURL)
 
 const service = axios.create({
