@@ -5,12 +5,8 @@ export function login(username, password) {
   params.append('username', username)
   params.append('password', password)
   return request({
-    url: '/token',
-    method: 'post',
-    data: params.toString(),
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    }
+    url: `/token?${params.toString()}`,
+    method: 'post'
   })
 }
 
