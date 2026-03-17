@@ -1,13 +1,16 @@
 import request from '@/utils/request'
 
 export function login(username, password) {
-  const formData = new FormData()
-  formData.append('username', username)
-  formData.append('password', password)
+  const params = new URLSearchParams()
+  params.append('username', username)
+  params.append('password', password)
   return request({
     url: '/token',
     method: 'post',
-    data: formData
+    data: params,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
   })
 }
 
