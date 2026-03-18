@@ -904,10 +904,12 @@ def download_template(
 
 # 创建默认管理员账号
 def create_default_admin():
+    # 从环境变量获取默认管理员密码，生产环境请修改此密码！
+    default_admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
     db = SessionLocal()
     admin = get_user(db, username="admin")
     if not admin:
-        hashed_password = get_password_hash("admin123")
+        hashed_password = get_password_hash(default_admin_password)
         admin = User(
             username="admin",
             email="admin@example.com",
@@ -916,6 +918,7 @@ def create_default_admin():
         )
         db.add(admin)
         db.commit()
+        print(f"Default admin created with password: {default_admin_password}")
     db.close()
 
 create_default_admin()
