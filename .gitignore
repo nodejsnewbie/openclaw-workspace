@@ -31,3 +31,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# CodeBuddy (本地集成配置)
+.codebuddy/
