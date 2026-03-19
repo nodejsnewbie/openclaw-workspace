@@ -1,5 +1,7 @@
 # 环境变量
 .env
+.env.production
+.env.development
 env.txt
 
 # 数据库

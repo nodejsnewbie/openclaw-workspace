@@ -3,8 +3,8 @@ import { useUserStore } from '@/store/user'
 import { ElMessage } from 'element-plus'
 import router from '@/router'
 
-// API 地址配置 (Cloud Studio生产环境)
-const baseURL = 'https://6be1b975cf624542ac1ac5c18f7fe421.codebuddy.cloudstudio.run/api'
+// API 地址配置 (通过环境变量)
+const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
 console.log('API Base URL:', baseURL)
 
 const service = axios.create({
