@@ -42,7 +42,7 @@ export function getThesisHistory() {
 
 export function downloadThesisReport(thesisId) {
   return request({
-    url: `/thesis/report/${thesisId}/download`,
+    url: `/thesis/report/${thesisId}`,
     method: 'get',
     responseType: 'blob'
   })
