@@ -134,6 +134,25 @@ UPLOAD_DIR = "/path/to/upload/files"
 REPORT_DIR = "/path/to/generated/reports"
 ```
 
+## 🚀 部署指南
+
+### 前端部署 (Cloud Studio)
+
+1. 修改 `frontend/.env.production` 中的API地址
+2. 构建前端: `cd frontend && npm install && npm run build`
+3. 部署 `dist` 目录
+
+### 后端部署 (Cloud Studio)
+
+1. 安装依赖: `cd backend && pip install -r requirements.txt`
+2. 设置环境变量: `SECRET_KEY`, `AI_API_KEY`
+3. 启动: `uvicorn main:app --host 0.0.0.0 --port 8000`
+
+### Docker部署
+```bash
+docker-compose up -d
+```
+
 ## 🤝 贡献指南
 1. Fork 本仓库
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
@@ -142,4 +161,4 @@ REPORT_DIR = "/path/to/generated/reports"
 5. 打开 Pull Request
 
 ## 📝 许可证
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+本项目采用 MIT 许可证

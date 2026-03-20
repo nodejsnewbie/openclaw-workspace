@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 配置
+<<<<<<< HEAD
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-keep-it-safe-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 300
@@ -930,6 +931,12 @@ create_default_admin()
 frontend_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.exists(frontend_dist_path):
     app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
+=======
+        print(f"Default admin created with password: {default_admin_password}")
+    db.close()
+
+create_default_admin()
+>>>>>>> f643586cb2356c497d8d55347485ff4343770281
 
 if __name__ == "__main__":
     import uvicorn

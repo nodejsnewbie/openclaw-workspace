@@ -8,7 +8,10 @@ export function login(username, password) {
   return request({
     url: '/token',
     method: 'post',
-    data: formData
+    data: formData,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    }
   })
 }
 

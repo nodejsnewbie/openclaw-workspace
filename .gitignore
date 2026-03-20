@@ -1,5 +1,36 @@
-node_modules/
-.env
-uploads/
+# Python
 *.pyc
+*.pyo
 __pycache__/
+.venv/
+*.egg-info/
+
+# 环境变量
+.env
+env.txt
+
+# 数据库
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+dist/
+
+# 用户上传 / 生成文件
+uploads/
+thesis-checker-web/backend/uploads/
+thesis-checker-web/backend/reports/
+thesis-checker-web/backend/requirements/
+thesis-checker-web/backend/templates/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# CodeBuddy (本地集成配置)
+.codebuddy/

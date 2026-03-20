@@ -1,0 +1,27 @@
+# 环境变量
+.env
+.env.production
+.env.development
+env.txt
+
+# 数据库
+*.db
+
+# 上传文件
+backend/uploads/
+backend/reports/
+backend/requirements/
+backend/templates/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Node
+node_modules/
