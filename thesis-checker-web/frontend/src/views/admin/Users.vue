@@ -35,7 +35,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getUsers, toggleAdminRole, deleteUser } from '@/api/admin'
+import { getUsers } from '@/api/admin'
 
 const userList = ref([])
 
@@ -46,33 +46,18 @@ onMounted(() => {
 const fetchUsers = async () => {
   try {
     const res = await getUsers()
-    userList.value = res.data
+    userList.value = res
   } catch (error) {
     console.error('获取用户列表失败:', error)
   }
 }
 
 const toggleAdmin = async (user) => {
-  const action = user.role === 'admin' ? '取消管理员' : '设为管理员'
-  if (confirm(`确定要${action}吗？`)) {
-    try {
-      await toggleAdminRole(user.id)
-      fetchUsers()
-    } catch (error) {
-      console.error('操作失败:', error)
-    }
-  }
+  alert('当前版本暂不支持修改权限')
 }
 
 const removeUser = async (id) => {
-  if (confirm('确定要删除这个用户吗？')) {
-    try {
-      await deleteUser(id)
-      fetchUsers()
-    } catch (error) {
-      console.error('删除失败:', error)
-    }
-  }
+  alert('当前版本暂不支持删除用户')
 }
 </script>
 

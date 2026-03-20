@@ -7,7 +7,16 @@
           <p class="sub-title">论文标题：{{ thesisInfo?.title }} | 文件名：{{ thesisInfo?.filename }}</p>
         </div>
         <div class="header-actions">
-          <el-button type="primary" @click="downloadReport">
+          <el-tag v-if="thesisInfo?.status === 'checking'" type="warning" class="status-tag">
+            <el-icon class="is-loading"><Loading /></el-icon> 检查中...
+          </el-tag>
+          <el-tag v-else-if="thesisInfo?.status === 'failed'" type="danger" class="status-tag">检查失败</el-tag>
+          
+          <el-button v-if="thesisInfo?.status !== 'checking'" type="warning" :loading="checking" @click="handleRecheck">
+            <el-icon><Refresh /></el-icon>
+            重新检查
+          </el-button>
+          <el-button v-if="thesisInfo?.status === 'completed'" type="primary" @click="downloadReport">
             <el-icon><Download /></el-icon>
             下载报告
           </el-button>
@@ -16,81 +25,102 @@
       </div>
     </el-card>
 
-    <el-row :gutter="20" class="summary-row">
-      <el-col :span="6">
-        <el-card class="score-card">
-          <div class="score-circle" :style="scoreStyle">
-            <div class="score-number">{{ reportData?.score || 0 }}</div>
-            <div class="score-label">综合评分</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :span="18">
-        <el-card class="stats-card">
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <div class="stat-item">
-                <div class="stat-number danger">{{ issueStats.total || 0 }}</div>
-                <div class="stat-label">总问题数</div>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="stat-item">
-                <div class="stat-number warning">{{ issueStats.high || 0 }}</div>
-                <div class="stat-label">高优先级问题</div>
-              </div>
-            </el-col>
-            <el-col :span="8">
-              <div class="stat-item">
-                <div class="stat-number info">{{ issueStats.low || 0 }}</div>
-                <div class="stat-label">优化建议</div>
-              </div>
-            </el-col>
-          </el-row>
-          <div class="summary-text" style="margin-top: 20px">
-            <strong>检查摘要：</strong>{{ reportData?.summary || '暂无摘要' }}
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-card class="issues-card">
-      <h3>问题详情</h3>
-      
-      <el-tabs v-model="activeTab" type="border-card">
-        <el-tab-pane label="全部问题" name="all">
-          <issue-list :issues="reportData?.issues || []" />
-        </el-tab-pane>
-        <el-tab-pane label="格式问题" name="format">
-          <issue-list :issues="formatIssues" />
-        </el-tab-pane>
-        <el-tab-pane label="内容建议" name="content">
-          <issue-list :issues="contentIssues" />
-        </el-tab-pane>
-      </el-tabs>
+    <el-card v-if="thesisInfo?.status === 'checking'" class="checking-card">
+      <el-result title="论文检查中" sub-title="Kimi k2.5 正在深度解析您的论文，请稍候...">
+        <template #icon>
+          <el-icon :size="60" class="is-loading"><Loading /></el-icon>
+        </template>
+        <template #extra>
+          <p>预计需要 1-2 分钟，页面会自动刷新结果</p>
+        </template>
+      </el-result>
     </el-card>
 
-    <el-card class="suggestions-card">
-      <h3>修改建议</h3>
-      <div class="suggestion-content">
-        <ul>
-          <li>🔴 请优先修改高优先级问题，这些问题可能直接影响论文评审结果</li>
-          <li>🟡 格式问题请对照学校发布的《毕业论文格式要求》逐一核对修改</li>
-          <li>🟢 内容优化建议仅供参考，请根据实际研究内容进行调整</li>
-          <li>修改完成后可以重新上传论文进行二次检查，确保所有问题都已解决</li>
-          <li>如果对检查结果有疑问，可以联系指导老师或教务部门确认规范要求</li>
-        </ul>
-      </div>
+    <div v-else-if="thesisInfo?.status === 'completed'">
+      <el-row :gutter="20" class="summary-row">
+        <!-- ... 原有的综合评分和摘要统计 ... -->
+        <el-col :span="6">
+          <el-card class="score-card">
+            <div class="score-circle" :style="scoreStyle">
+              <div class="score-number">{{ reportData?.score || 0 }}</div>
+              <div class="score-label">综合评分</div>
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :span="18">
+          <el-card class="stats-card">
+            <el-row :gutter="20">
+              <el-col :span="8">
+                <div class="stat-item">
+                  <div class="stat-number danger">{{ issueStats.total || 0 }}</div>
+                  <div class="stat-label">总问题数</div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="stat-item">
+                  <div class="stat-number warning">{{ issueStats.high || 0 }}</div>
+                  <div class="stat-label">高优先级问题</div>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="stat-item">
+                  <div class="stat-number info">{{ issueStats.low || 0 }}</div>
+                  <div class="stat-label">优化建议</div>
+                </div>
+              </el-col>
+            </el-row>
+            <div class="summary-text" style="margin-top: 20px">
+              <strong>检查摘要：</strong>{{ reportData?.summary || '暂无摘要' }}
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <el-card class="issues-card">
+        <h3>问题详情</h3>
+        <el-tabs v-model="activeTab" type="border-card">
+          <el-tab-pane label="全部问题" name="all">
+            <issue-list :issues="reportData?.issues || []" />
+          </el-tab-pane>
+          <el-tab-pane label="格式问题" name="format">
+            <issue-list :issues="formatIssues" />
+          </el-tab-pane>
+          <el-tab-pane label="内容建议" name="content">
+            <issue-list :issues="contentIssues" />
+          </el-tab-pane>
+        </el-tabs>
+      </el-card>
+
+      <el-card class="suggestions-card">
+        <h3>修改建议</h3>
+        <div class="suggestion-content">
+          <ul>
+            <li>🔴 请优先修改高优先级问题，这些问题可能直接影响论文评审结果</li>
+            <li>🟡 格式问题请对照学校发布的《毕业论文格式要求》逐一核对修改</li>
+            <li>🟢 内容优化建议仅供参考，请根据实际研究内容进行调整</li>
+            <li>修改完成后可以重新上传论文进行二次检查，确保所有问题都已解决</li>
+          </ul>
+        </div>
+      </el-card>
+    </div>
+
+    <el-card v-else-if="thesisInfo?.status === 'failed'" class="failed-card">
+      <el-result icon="error" title="检查失败" sub-title="可能由于文件损坏或 AI 服务超时导致。">
+        <template #extra>
+          <el-button type="primary" @click="handleRecheck">尝试重新检查</el-button>
+        </template>
+      </el-result>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { getThesisReport } from '@/api/thesis'
+import { getThesisReport, downloadThesisReport, checkThesis, getThesisInfo } from '@/api/thesis'
 import { ElMessage } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { Download, Refresh, Loading } from '@element-plus/icons-vue'
+import IssueList from '@/components/IssueList.vue'
 
 const route = useRoute()
 const thesisId = route.params.id
@@ -98,6 +128,7 @@ const thesisId = route.params.id
 const thesisInfo = ref(null)
 const reportData = ref(null)
 const activeTab = ref('all')
+const checking = ref(false)
 
 const issueStats = computed(() => {
   if (!reportData.value?.issues) {
@@ -130,51 +161,64 @@ const contentIssues = computed(() => {
   return reportData.value?.issues?.filter(i => i.type === '内容建议') || []
 })
 
+let pollTimer = null
+
 const loadReport = async () => {
   try {
-    const res = await getThesisReport(thesisId)
-    reportData.value = res
+    const info = await getThesisInfo(thesisId)
+    thesisInfo.value = info
+    
+    if (info.status === 'completed') {
+      const report = await getThesisReport(thesisId)
+      reportData.value = report
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+    } else if (info.status === 'checking') {
+      // 启动轮询
+      if (!pollTimer) {
+        pollTimer = setInterval(loadReport, 5000)
+      }
+    } else {
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+    }
   } catch (error) {
-    ElMessage.error('加载报告失败')
+    console.error('加载详情失败', error)
   }
 }
 
-const downloadReport = () => {
-  ElMessage.info('下载功能开发中...')
+const downloadReport = async () => {
+  try {
+    const blob = await downloadThesisReport(thesisId)
+    const url = window.URL.createObjectURL(new Blob([blob]))
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `论文检查报告_${reportData.value?.title || thesisId}.md`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('报告下载成功')
+  } catch (error) {
+    ElMessage.error('下载报告失败')
+    console.error(error)
+  }
 }
 
-// 问题列表组件
-const IssueList = {
-  props: ['issues'],
-  template: `
-    <div v-if="issues.length === 0" class="empty-state">
-      <el-empty description="该分类下暂无问题" />
-    </div>
-    <div v-else>
-      <div v-for="(issue, index) in issues" :key="index" class="issue-item">
-        <div class="issue-header">
-          <el-tag :type="getSeverityType(issue.severity)" size="small">
-            {{ getSeverityText(issue.severity) }}
-          </el-tag>
-          <span class="issue-position">{{ issue.position }}</span>
-          <span class="issue-type">{{ issue.type }}</span>
-        </div>
-        <div class="issue-content">
-          <p><strong>问题描述：</strong>{{ issue.description }}</p>
-          <p><strong>修改建议：</strong>{{ issue.suggestion }}</p>
-        </div>
-      </div>
-    </div>
-  `,
-  methods: {
-    getSeverityType(severity) {
-      const map = { high: 'danger', medium: 'warning', low: 'info' }
-      return map[severity] || 'info'
-    },
-    getSeverityText(severity) {
-      const map = { high: '高优先级', medium: '中优先级', low: '低优先级' }
-      return map[severity] || '低优先级'
-    }
+const handleRecheck = async () => {
+  checking.value = true
+  try {
+    await checkThesis(thesisId)
+    ElMessage.success('重新检查完成')
+    await loadReport()
+  } catch (error) {
+    ElMessage.error('重新检查失败')
+  } finally {
+    checking.value = false
   }
 }
 
@@ -293,7 +337,7 @@ onMounted(() => {
   line-height: 1.6;
 }
 
-.issues-card, .suggestions-card {
+.suggestions-card {
   margin-bottom: 20px;
 }
 
@@ -301,35 +345,6 @@ onMounted(() => {
   margin: 0 0 20px 0;
   font-size: 18px;
   color: #303133;
-}
-
-.issue-item {
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 15px;
-}
-
-.issue-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
-  gap: 10px;
-}
-
-.issue-position {
-  font-weight: bold;
-  color: #409eff;
-}
-
-.issue-type {
-  color: #909399;
-  margin-left: auto;
-}
-
-.issue-content p {
-  margin: 5px 0;
-  line-height: 1.6;
 }
 
 .suggestion-content ul {
@@ -341,8 +356,17 @@ onMounted(() => {
   margin-bottom: 8px;
   line-height: 1.6;
 }
+.status-tag {
+  margin-right: 15px;
+  padding: 0 15px;
+  height: 32px;
+  font-weight: bold;
+}
 
-.empty-state {
-  padding: 40px 0;
+.checking-card, .failed-card {
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

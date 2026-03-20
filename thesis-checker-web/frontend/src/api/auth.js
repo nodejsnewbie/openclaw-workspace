@@ -4,6 +4,7 @@ export function login(username, password) {
   const formData = new FormData()
   formData.append('username', username)
   formData.append('password', password)
+  formData.append('grant_type', 'password')
   return request({
     url: '/token',
     method: 'post',

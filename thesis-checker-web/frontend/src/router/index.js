@@ -50,6 +50,12 @@ const routes = [
             meta: { title: '格式要求管理' }
           },
           {
+            path: 'templates',
+            name: 'AdminTemplates',
+            component: () => import('@/views/admin/Templates.vue'),
+            meta: { title: '书写模板管理' }
+          },
+          {
             path: 'users',
             name: 'AdminUsers',
             component: () => import('@/views/admin/Users.vue'),

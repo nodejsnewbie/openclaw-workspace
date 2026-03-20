@@ -4,6 +4,7 @@
       <h2>管理后台</h2>
       <div class="menu">
         <router-link to="/admin/requirements" class="menu-item">格式要求管理</router-link>
+        <router-link to="/admin/templates" class="menu-item">📄 书写模板管理</router-link>
         <router-link to="/admin/users" class="menu-item">用户管理</router-link>
       </div>
     </div>
