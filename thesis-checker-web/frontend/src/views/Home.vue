@@ -108,11 +108,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useUserStore } from '@/store/user'
-<<<<<<< HEAD
 import { getThesisHistory } from '@/api/thesis'
-=======
-import { getHistoryList } from '@/api/thesis'
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b
 import { Upload, Check, Star, Setting, User } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -145,7 +141,6 @@ const getStatusText = (status) => {
 
 const loadData = async () => {
   try {
-<<<<<<< HEAD
     const res = await getThesisHistory()
     recentReports.value = res.slice(0, 5)
     stats.value.uploadCount = res.length
@@ -153,15 +148,6 @@ const loadData = async () => {
     
     // 计算平均得分（需要从报告中获取）
     const completed = res.filter(item => item.status === 'completed')
-=======
-    const res = await getHistoryList()
-    recentReports.value = res.data.slice(0, 5)
-    stats.value.uploadCount = res.data.length
-    stats.value.checkCount = res.data.filter(item => item.status === 'completed').length
-    
-    // 计算平均得分（需要从报告中获取）
-    const completed = res.data.filter(item => item.status === 'completed')
->>>>>>> 680064f55e8c67ce67deed8e9eebceca581a767b
     if (completed.length > 0) {
       stats.value.avgScore = 85 // 示例值，实际需要从报告中计算
     }
