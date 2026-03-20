@@ -17,7 +17,7 @@ import PyPDF2
 import markdown
 from dotenv import load_dotenv
 from bson import ObjectId
-from database import database, USERS_COLLECTION, THESES_COLLECTION, REQUIREMENTS_COLLECTION, TEMPLATES_COLLECTION, create_indexes
+from database import database, USERS_COLLECTION, THESES_COLLECTION, REQUIREMENTS_COLLECTION, TEMPLATES_COLLECTION, create_indexes, use_memory
 
 # 加载环境变量
 load_dotenv()
@@ -404,6 +404,8 @@ async def startup_event():
     await create_indexes()
     # 创建默认管理员账号
     await create_default_admin()
+    if use_memory:
+        print("⚠ Running in MEMORY mode - data will be lost on restart")
 
 # 路由
 @app.post("/api/token", response_model=Token)
