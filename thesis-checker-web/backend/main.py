@@ -2,10 +2,7 @@ from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, status, F
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session, relationship
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -19,6 +16,8 @@ from docx import Document
 import PyPDF2
 import markdown
 from dotenv import load_dotenv
+from bson import ObjectId
+from database import database, USERS_COLLECTION, THESES_COLLECTION, REQUIREMENTS_COLLECTION, TEMPLATES_COLLECTION, create_indexes
 
 # 加载环境变量
 load_dotenv()
@@ -43,14 +42,6 @@ os.makedirs(REPORT_DIR, exist_ok=True)
 os.makedirs(REQUIREMENTS_DIR, exist_ok=True)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
 
-# 数据库配置
-SQLALCHEMY_DATABASE_URL = "sqlite:///./thesis_checker.db"
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
 # 密码加密
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/token")
@@ -65,56 +56,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 数据库模型
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(50), unique=True, index=True)
-    email = Column(String(100), unique=True, index=True)
-    hashed_password = Column(String(100))
-    is_admin = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    theses = relationship("Thesis", back_populates="owner")
-
-class Thesis(Base):
-    __tablename__ = "theses"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(200))
-    filename = Column(String(200))
-    file_path = Column(String(300))
-    file_type = Column(String(20))
-    status = Column(String(20), default="uploaded")  # uploaded, checking, completed, failed
-    report_path = Column(String(300))
-    check_result = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    owner_id = Column(Integer, ForeignKey("users.id"))
-    owner = relationship("User", back_populates="theses")
-
-class Requirement(Base):
-    __tablename__ = "requirements"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100))
-    type = Column(String(20))  # school, major
-    major = Column(String(100), nullable=True)
-    file_path = Column(String(300))
-    content = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-class Template(Base):
-    """书写模板：管理员可上传供学生下载的论文模板文件"""
-    __tablename__ = "templates"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200))
-    category = Column(String(50))  # full/cover/body/reference
-    description = Column(Text, nullable=True)
-    filename = Column(String(200))  # 原始文件名（供下载时使用）
-    file_path = Column(String(300))
-    file_type = Column(String(20))
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-Base.metadata.create_all(bind=engine)
 
 # Pydantic模型
 class Token(BaseModel):
@@ -134,7 +75,7 @@ class UserCreate(UserBase):
     password: str
 
 class UserResponse(UserBase):
-    id: int
+    id: str
     is_admin: bool
     created_at: datetime
     class Config:
@@ -144,7 +85,7 @@ class ThesisBase(BaseModel):
     title: str
 
 class ThesisResponse(ThesisBase):
-    id: int
+    id: str
     filename: str
     file_type: str
     status: str
@@ -158,14 +99,14 @@ class RequirementBase(BaseModel):
     major: Optional[str] = None
 
 class RequirementResponse(RequirementBase):
-    id: int
+    id: str
     created_at: datetime
     updated_at: datetime
     class Config:
         from_attributes = True
 
 class TemplateResponse(BaseModel):
-    id: int
+    id: str
     name: str
     category: str
     description: Optional[str]
@@ -173,7 +114,7 @@ class TemplateResponse(BaseModel):
     file_type: str
     created_at: datetime
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CheckResult(BaseModel):
     issues: List[dict]
@@ -182,27 +123,21 @@ class CheckResult(BaseModel):
     summary: str
 
 # 工具函数
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def get_user(db: Session, username: str):
-    return db.query(User).filter(User.username == username).first()
+async def get_user(username: str):
+    user = await database[USERS_COLLECTION].find_one({"username": username})
+    return user
 
-def authenticate_user(db: Session, username: str, password: str):
-    user = get_user(db, username)
+async def authenticate_user(username: str, password: str):
+    user = await get_user(username)
     if not user:
         return False
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, user["hashed_password"]):
         return False
     return user
 
@@ -216,7 +151,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -230,13 +165,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(db, username=token_data.username)
+    user = await get_user(username=token_data.username)
     if user is None:
         raise credentials_exception
     return user
 
-async def get_current_admin(current_user: User = Depends(get_current_user)):
-    if not current_user.is_admin:
+async def get_current_admin(current_user: dict = Depends(get_current_user)):
+    if not current_user.get("is_admin"):
         raise HTTPException(status_code=403, detail="Not authorized as admin")
     return current_user
 
@@ -463,15 +398,21 @@ def check_thesis(content, requirements_text, templates_info=""):
         'summary': summary
     }
 
+# 启动事件：创建索引
+@app.on_event("startup")
+async def startup_event():
+    await create_indexes()
+    # 创建默认管理员账号
+    await create_default_admin()
+
 # 路由
 @app.post("/api/token", response_model=Token)
 async def login_for_access_token(
     username: str = Form(...),
     password: str = Form(...),
     grant_type: str = Form(default="password"),
-    db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, username, password)
+    user = await authenticate_user(username, password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -480,34 +421,41 @@ async def login_for_access_token(
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user["username"]}, expires_delta=access_token_expires
     )
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "is_admin": user.is_admin,
-        "username": user.username
+        "is_admin": user["is_admin"],
+        "username": user["username"]
     }
 
 @app.post("/api/auth/register", response_model=UserResponse)
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = get_user(db, username=user.username)
+async def register_user(user: UserCreate):
+    db_user = await get_user(username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
+    
+    # 检查邮箱是否已存在
+    existing_email = await database[USERS_COLLECTION].find_one({"email": user.email})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
     hashed_password = get_password_hash(user.password)
-    db_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password,
-        is_admin=False
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
+    user_doc = {
+        "username": user.username,
+        "email": user.email,
+        "hashed_password": hashed_password,
+        "is_admin": False,
+        "created_at": datetime.utcnow()
+    }
+    result = await database[USERS_COLLECTION].insert_one(user_doc)
+    user_doc["id"] = str(result.inserted_id)
+    return user_doc
 
 @app.get("/api/auth/profile", response_model=UserResponse)
-def read_users_me(current_user: User = Depends(get_current_user)):
+async def read_users_me(current_user: dict = Depends(get_current_user)):
+    current_user["id"] = str(current_user["_id"])
     return current_user
 
 # 论文相关接口
@@ -516,8 +464,7 @@ async def upload_thesis(
     background_tasks: BackgroundTasks,
     title: str = Form(...),
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
 ):
     file_ext = os.path.splitext(file.filename)[1].lower()
     allowed_extensions = ['.docx', '.doc', '.pdf', '.md']
@@ -532,122 +479,131 @@ async def upload_thesis(
         content = await file.read()
         buffer.write(content)
     
-    db_thesis = Thesis(
-        title=title,
-        filename=file.filename,
-        file_path=file_path,
-        file_type=file_ext[1:],
-        owner_id=current_user.id,
-        status="checking"  # 直接设置为 checking
-    )
-    db.add(db_thesis)
-    db.commit()
-    db.refresh(db_thesis)
+    thesis_doc = {
+        "title": title,
+        "filename": file.filename,
+        "file_path": file_path,
+        "file_type": file_ext[1:],
+        "owner_id": str(current_user["_id"]),
+        "status": "checking"
+    }
+    result = await database[THESES_COLLECTION].insert_one(thesis_doc)
+    thesis_doc["id"] = str(result.inserted_id)
     
     # 启动后台检查任务
-    background_tasks.add_task(perform_check_logic, db_thesis.id)
+    background_tasks.add_task(perform_check_logic, str(result.inserted_id))
     
-    return db_thesis
+    return thesis_doc
 
-def perform_check_logic(thesis_id: int):
+def perform_check_logic(thesis_id: str):
+    """异步执行论文检查逻辑 (同步版本，用于后台任务)"""
+    import asyncio
+    asyncio.run(_perform_check_logic_async(thesis_id))
+
+async def _perform_check_logic_async(thesis_id: str):
     """异步执行论文检查逻辑"""
-    # 获取新的数据库会话，因为后台任务在请求结束后运行
-    db = SessionLocal()
-    try:
-        thesis = db.query(Thesis).filter(Thesis.id == thesis_id).first()
-        if not thesis:
-            return
+    from bson import ObjectId
+    
+    thesis = await database[THESES_COLLECTION].find_one({"_id": ObjectId(thesis_id)})
+    if not thesis:
+        return
 
-        thesis.status = "checking"
-        db.commit()
+    await database[THESES_COLLECTION].update_one(
+        {"_id": ObjectId(thesis_id)},
+        {"$set": {"status": "checking"}}
+    )
 
-        # 读取文件内容
-        content = []
-        if thesis.file_type == 'docx':
-            content = read_docx(thesis.file_path)
-        elif thesis.file_type == 'doc':
-            content = read_doc(thesis.file_path)
-        elif thesis.file_type == 'pdf':
-            content = read_pdf(thesis.file_path)
-        elif thesis.file_type == 'md':
-            content = read_md(thesis.file_path)
-        
-        # 加载规范要求
-        requirements = db.query(Requirement).all()
-        req_content = "\n".join([f"[{r.type}] {r.name}: {r.content}" for r in requirements])
-        
-        # 加载书写模板信息
-        templates = db.query(Template).all()
-        templates_info = "\n".join([f"模板类别: {t.category}, 名称: {t.name}, 描述: {t.description}" for t in templates])
-        
-        # 执行检查
-        print(f"Starting check for thesis {thesis_id}, content paragraphs: {len(content)}")
-        if not content:
-            # 如果内容为空，构造一个带警告的虚拟结果
-            result = {
-                'issues': [{
-                    'position': '全文',
-                    'type': '内容缺失',
-                    'description': '未能从上传的文件中提取到有效文本内容。请确认文件不是扫描件或加密文档。',
-                    'suggestion': '请尝试另存为 .docx 格式后重新上传。',
-                    'severity': 'high'
-                }],
-                'total_issues': 1,
-                'score': 0,
-                'summary': '文件读取失败，无法进行 AI 审计。'
-            }
-        else:
-            result = check_thesis(content, req_content, templates_info)
-        
-        # 保存结果
-        thesis.check_result = json.dumps(result, ensure_ascii=False)
-        thesis.status = "completed"
-        db.commit() # 提前提交状态
+    # 读取文件内容
+    content = []
+    if thesis['file_type'] == 'docx':
+        content = read_docx(thesis['file_path'])
+    elif thesis['file_type'] == 'doc':
+        content = read_doc(thesis['file_path'])
+    elif thesis['file_type'] == 'pdf':
+        content = read_pdf(thesis['file_path'])
+    elif thesis['file_type'] == 'md':
+        content = read_md(thesis['file_path'])
+    
+    # 加载规范要求
+    requirements = await database[REQUIREMENTS_COLLECTION].find().to_list(length=None)
+    req_content = "\n".join([f"[{r['type']}] {r['name']}: {r['content']}" for r in requirements])
+    
+    # 加载书写模板信息
+    templates = await database[TEMPLATES_COLLECTION].find().to_list(length=None)
+    templates_info = "\n".join([f"模板类别: {t['category']}, 名称: {t['name']}, 描述: {t.get('description', '')}" for t in templates])
+    
+    # 执行检查
+    print(f"Starting check for thesis {thesis_id}, content paragraphs: {len(content)}")
+    if not content:
+        # 如果内容为空，构造一个带警告的虚拟结果
+        result = {
+            'issues': [{
+                'position': '全文',
+                'type': '内容缺失',
+                'description': '未能从上传的文件中提取到有效文本内容。请确认文件不是扫描件或加密文档。',
+                'suggestion': '请尝试另存为 .docx 格式后重新上传。',
+                'severity': 'high'
+            }],
+            'total_issues': 1,
+            'score': 0,
+            'summary': '文件读取失败，无法进行 AI 审计。'
+        }
+    else:
+        result = check_thesis(content, req_content, templates_info)
+    
+    # 保存结果
+    await database[THESES_COLLECTION].update_one(
+        {"_id": ObjectId(thesis_id)},
+        {"$set": {
+            "check_result": json.dumps(result, ensure_ascii=False),
+            "status": "completed"
+        }}
+    )
 
-        # 生成报告文件
-        report_filename = f"report_{thesis_id}.md"
-        report_path = os.path.join(REPORT_DIR, report_filename)
-        
-        report_content = f"# 毕业论文检查报告\n\n"
-        report_content += f"## 基本信息\n"
-        report_content += f"- 论文标题：{thesis.title}\n"
-        report_content += f"- 文件名：{thesis.filename}\n"
-        report_content += f"- 检查时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        report_content += f"- 综合评分：{result['score']}分\n"
-        report_content += f"- 问题总数：{result['total_issues']}个\n\n"
-        
-        report_content += f"## 问题详情\n"
-        for i, issue in enumerate(result['issues'], 1):
-            report_content += f"### {i}. {issue['position']}\n"
-            report_content += f"**类型**：{issue['type']}\n"
-            report_content += f"**问题描述**：{issue['description']}\n"
-            report_content += f"**修改建议**：{issue['suggestion']}\n\n"
-        
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(report_content)
-        
-        thesis.report_path = report_path
-        db.commit()
-    except Exception as e:
-        print(f"Background check failed for thesis {thesis_id}: {str(e)}")
-        thesis.status = "failed"
-        db.commit()
-    finally:
-        db.close()
+    # 生成报告文件
+    report_filename = f"report_{thesis_id}.md"
+    report_path = os.path.join(REPORT_DIR, report_filename)
+    
+    report_content = f"# 毕业论文检查报告\n\n"
+    report_content += f"## 基本信息\n"
+    report_content += f"- 论文标题：{thesis['title']}\n"
+    report_content += f"- 文件名：{thesis['filename']}\n"
+    report_content += f"- 检查时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    report_content += f"- 综合评分：{result['score']}分\n"
+    report_content += f"- 问题总数：{result['total_issues']}个\n\n"
+    
+    report_content += f"## 问题详情\n"
+    for i, issue in enumerate(result['issues'], 1):
+        report_content += f"### {i}. {issue['position']}\n"
+        report_content += f"**类型**：{issue['type']}\n"
+        report_content += f"**问题描述**：{issue['description']}\n"
+        report_content += f"**修改建议**：{issue['suggestion']}\n\n"
+    
+    with open(report_path, 'w', encoding='utf-8') as f:
+        f.write(report_content)
+    
+    await database[THESES_COLLECTION].update_one(
+        {"_id": ObjectId(thesis_id)},
+        {"$set": {"report_path": report_path}}
+    )
 
 @app.post("/api/thesis/check/{thesis_id}")
-def check_thesis_endpoint(
-    thesis_id: int,
+async def check_thesis_endpoint(
+    thesis_id: str,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: dict = Depends(get_current_user),
 ):
-    thesis = db.query(Thesis).filter(Thesis.id == thesis_id, Thesis.owner_id == current_user.id).first()
+    thesis = await database[THESES_COLLECTION].find_one({
+        "_id": ObjectId(thesis_id),
+        "owner_id": str(current_user["_id"])
+    })
     if not thesis:
         raise HTTPException(status_code=404, detail="Thesis not found")
     
-    thesis.status = "checking"
-    db.commit()
+    await database[THESES_COLLECTION].update_one(
+        {"_id": ObjectId(thesis_id)},
+        {"$set": {"status": "checking"}}
+    )
     
     # 启动后台任务
     background_tasks.add_task(perform_check_logic, thesis_id)
@@ -655,98 +611,108 @@ def check_thesis_endpoint(
     return {"message": "论文检查已启动，请稍后查看结果", "thesis_id": thesis_id, "status": "checking"}
 
 @app.get("/api/thesis/history", response_model=List[ThesisResponse])
-def get_thesis_history(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    print(f"Fetching history for user: {current_user.username}")
-    theses = db.query(Thesis).filter(Thesis.owner_id == current_user.id).order_by(Thesis.created_at.desc()).all()
-    return theses
+async def get_thesis_history(current_user: dict = Depends(get_current_user)):
+    print(f"Fetching history for user: {current_user['username']}")
+    theses = await database[THESES_COLLECTION].find({
+        "owner_id": str(current_user["_id"])
+    }).sort("created_at", -1).to_list(length=None)
+    
+    result = []
+    for t in theses:
+        t["id"] = str(t["_id"])
+        result.append(t)
+    return result
 
 @app.get("/api/thesis/report/{thesis_id}")
-def get_thesis_report(
-    thesis_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+async def get_thesis_report(
+    thesis_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
-    thesis = db.query(Thesis).filter(Thesis.id == thesis_id, Thesis.owner_id == current_user.id).first()
+    thesis = await database[THESES_COLLECTION].find_one({
+        "_id": ObjectId(thesis_id),
+        "owner_id": str(current_user["_id"])
+    })
     if not thesis:
         raise HTTPException(status_code=404, detail="Thesis not found")
     
-    if thesis.status != "completed":
+    if thesis.get("status") != "completed":
         raise HTTPException(status_code=400, detail="Check not completed")
     
-    if not thesis.check_result:
+    if not thesis.get("check_result"):
         raise HTTPException(status_code=404, detail="Report not found")
     
-    return json.loads(thesis.check_result)
+    return json.loads(thesis["check_result"])
 
 @app.get("/api/thesis/report/{thesis_id}/download")
-def download_thesis_report(
-    thesis_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+async def download_thesis_report(
+    thesis_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
     """下载生成的 Markdown 格式检查报告"""
-    thesis = db.query(Thesis).filter(Thesis.id == thesis_id, Thesis.owner_id == current_user.id).first()
+    thesis = await database[THESES_COLLECTION].find_one({
+        "_id": ObjectId(thesis_id),
+        "owner_id": str(current_user["_id"])
+    })
     if not thesis:
         raise HTTPException(status_code=404, detail="Thesis not found")
     
-    if not thesis.report_path or not os.path.exists(thesis.report_path):
+    report_path = thesis.get("report_path")
+    if not report_path or not os.path.exists(report_path):
         raise HTTPException(status_code=404, detail="Report file not found")
     
     return FileResponse(
-        path=thesis.report_path,
-        filename=f"论文检查报告_{thesis.title}.md",
+        path=report_path,
+        filename=f"论文检查报告_{thesis['title']}.md",
         media_type="text/markdown"
     )
 
 @app.get("/api/thesis/{thesis_id}", response_model=ThesisResponse)
-def get_thesis_info(
-    thesis_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+async def get_thesis_info(
+    thesis_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
-    thesis = db.query(Thesis).filter(Thesis.id == thesis_id, Thesis.owner_id == current_user.id).first()
+    thesis = await database[THESES_COLLECTION].find_one({
+        "_id": ObjectId(thesis_id),
+        "owner_id": str(current_user["_id"])
+    })
     if not thesis:
         raise HTTPException(status_code=404, detail="Thesis not found")
+    thesis["id"] = str(thesis["_id"])
     return thesis
 
 @app.delete("/api/thesis/{thesis_id}")
-def delete_thesis(
-    thesis_id: int,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+async def delete_thesis(
+    thesis_id: str,
+    current_user: dict = Depends(get_current_user),
 ):
     """删除论文记录及其关联文件"""
-    thesis = db.query(Thesis).filter(Thesis.id == thesis_id, Thesis.owner_id == current_user.id).first()
+    thesis = await database[THESES_COLLECTION].find_one({
+        "_id": ObjectId(thesis_id),
+        "owner_id": str(current_user["_id"])
+    })
     if not thesis:
         raise HTTPException(status_code=404, detail="Thesis not found")
     
     # 删除本地文件
     try:
-        if thesis.file_path and os.path.exists(thesis.file_path):
-            os.remove(thesis.file_path)
-        if thesis.report_path and os.path.exists(thesis.report_path):
-            os.remove(thesis.report_path)
+        if thesis.get("file_path") and os.path.exists(thesis["file_path"]):
+            os.remove(thesis["file_path"])
+        if thesis.get("report_path") and os.path.exists(thesis["report_path"]):
+            os.remove(thesis["report_path"])
     except Exception as e:
         print(f"Error deleting files for thesis {thesis_id}: {e}")
     
-    db.delete(thesis)
-    db.commit()
+    await database[THESES_COLLECTION].delete_one({"_id": ObjectId(thesis_id)})
     return {"message": "Thesis deleted successfully"}
 
 # 管理员接口
 @app.post("/api/admin/requirements", response_model=RequirementResponse)
-# NOTE: name/type/major 必须用 Form() 声明才能从 multipart/form-data 中解析，
-# 否则 FastAPI 会尝试从 query string 读取，导致 422 Unprocessable Entity
 async def upload_requirement(
     name: str = Form(...),
     type: str = Form(...),
     major: Optional[str] = Form(None),
     file: UploadFile = File(...),
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    current_admin: dict = Depends(get_current_admin),
 ):
     if type not in ['school', 'major']:
         raise HTTPException(status_code=400, detail="Invalid requirement type")
@@ -770,7 +736,6 @@ async def upload_requirement(
         doc = Document(file_path)
         content = "\n".join([para.text for para in doc.paragraphs])
     elif file_ext == '.doc':
-        # NOTE: 同样使用 read_doc 提取文本，歐化为纯文本字符串
         paras = read_doc(file_path)
         content = "\n".join([p['text'] for p in paras])
     elif file_ext == '.pdf':
@@ -781,52 +746,52 @@ async def upload_requirement(
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
     
-    db_req = Requirement(
-        name=name,
-        type=type,
-        major=major,
-        file_path=file_path,
-        content=content
-    )
-    db.add(db_req)
-    db.commit()
-    db.refresh(db_req)
-    
-    return db_req
+    req_doc = {
+        "name": name,
+        "type": type,
+        "major": major,
+        "file_path": file_path,
+        "content": content,
+        "created_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+    result = await database[REQUIREMENTS_COLLECTION].insert_one(req_doc)
+    req_doc["id"] = str(result.inserted_id)
+    return req_doc
 
 @app.get("/api/admin/requirements", response_model=List[RequirementResponse])
-def get_requirements(
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    requirements = db.query(Requirement).order_by(Requirement.created_at.desc()).all()
-    return requirements
+async def get_requirements(current_admin: dict = Depends(get_current_admin)):
+    requirements = await database[REQUIREMENTS_COLLECTION].find().sort("created_at", -1).to_list(length=None)
+    result = []
+    for r in requirements:
+        r["id"] = str(r["_id"])
+        result.append(r)
+    return result
 
 @app.delete("/api/admin/requirements/{req_id}")
-def delete_requirement(
-    req_id: int,
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+async def delete_requirement(
+    req_id: str,
+    current_admin: dict = Depends(get_current_admin),
 ):
-    req = db.query(Requirement).filter(Requirement.id == req_id).first()
+    req = await database[REQUIREMENTS_COLLECTION].find_one({"_id": ObjectId(req_id)})
     if not req:
         raise HTTPException(status_code=404, detail="Requirement not found")
     
-    if os.path.exists(req.file_path):
-        os.remove(req.file_path)
+    if os.path.exists(req["file_path"]):
+        os.remove(req["file_path"])
     
-    db.delete(req)
-    db.commit()
-    
+    await database[REQUIREMENTS_COLLECTION].delete_one({"_id": ObjectId(req_id)})
     return {"message": "Requirement deleted successfully"}
 
 @app.get("/api/admin/users", response_model=List[UserResponse])
-def get_admin_users(
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
+async def get_admin_users(current_admin: dict = Depends(get_current_admin)):
     """管理员获取所有用户列表"""
-    return db.query(User).order_by(User.created_at.desc()).all()
+    users = await database[USERS_COLLECTION].find().sort("created_at", -1).to_list(length=None)
+    result = []
+    for u in users:
+        u["id"] = str(u["_id"])
+        result.append(u)
+    return result
 
 # ───────── 书写模板接口 ─────────
 
@@ -838,8 +803,7 @@ async def upload_template(
     category: str = Form(...),
     description: Optional[str] = Form(None),
     file: UploadFile = File(...),
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    current_admin: dict = Depends(get_current_admin),
 ):
     if category not in TEMPLATE_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Allowed: {TEMPLATE_CATEGORIES}")
@@ -856,75 +820,69 @@ async def upload_template(
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
 
-    db_tpl = Template(
-        name=name,
-        category=category,
-        description=description,
-        filename=file.filename,  # NOTE: 保存原始文件名，下载时用作 Content-Disposition
-        file_path=file_path,
-        file_type=file_ext[1:]
-    )
-    db.add(db_tpl)
-    db.commit()
-    db.refresh(db_tpl)
-    return db_tpl
+    tpl_doc = {
+        "name": name,
+        "category": category,
+        "description": description,
+        "filename": file.filename,
+        "file_path": file_path,
+        "file_type": file_ext[1:],
+        "created_at": datetime.utcnow()
+    }
+    result = await database[TEMPLATES_COLLECTION].insert_one(tpl_doc)
+    tpl_doc["id"] = str(result.inserted_id)
+    return tpl_doc
 
 @app.get("/api/admin/templates", response_model=List[TemplateResponse])
-def get_templates(
-    db: Session = Depends(get_db)
-):
+async def get_templates():
     """所有用户均可查看模板列表"""
-    return db.query(Template).order_by(Template.created_at.desc()).all()
+    templates = await database[TEMPLATES_COLLECTION].find().sort("created_at", -1).to_list(length=None)
+    result = []
+    for t in templates:
+        t["id"] = str(t["_id"])
+        result.append(t)
+    return result
 
 @app.delete("/api/admin/templates/{tpl_id}")
-def delete_template(
-    tpl_id: int,
-    current_admin: User = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+async def delete_template(
+    tpl_id: str,
+    current_admin: dict = Depends(get_current_admin),
 ):
-    tpl = db.query(Template).filter(Template.id == tpl_id).first()
+    tpl = await database[TEMPLATES_COLLECTION].find_one({"_id": ObjectId(tpl_id)})
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    if os.path.exists(tpl.file_path):
-        os.remove(tpl.file_path)
-    db.delete(tpl)
-    db.commit()
+    if os.path.exists(tpl["file_path"]):
+        os.remove(tpl["file_path"])
+    await database[TEMPLATES_COLLECTION].delete_one({"_id": ObjectId(tpl_id)})
     return {"message": "Template deleted successfully"}
 
 @app.get("/api/templates/{tpl_id}/download")
-def download_template(
-    tpl_id: int,
-    db: Session = Depends(get_db)
-):
+async def download_template(tpl_id: str):
     """任何已登录用户均可下载模板文件"""
-    tpl = db.query(Template).filter(Template.id == tpl_id).first()
+    tpl = await database[TEMPLATES_COLLECTION].find_one({"_id": ObjectId(tpl_id)})
     if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    if not os.path.exists(tpl.file_path):
+    if not os.path.exists(tpl["file_path"]):
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FileResponse(
-        path=tpl.file_path,
-        filename=tpl.filename,
+        path=tpl["file_path"],
+        filename=tpl["filename"],
         media_type="application/octet-stream"
     )
 
 # 创建默认管理员账号
-def create_default_admin():
-    db = SessionLocal()
-    admin = get_user(db, username="admin")
+async def create_default_admin():
+    admin = await get_user(username="admin")
     if not admin:
         hashed_password = get_password_hash("admin123")
-        admin = User(
-            username="admin",
-            email="admin@example.com",
-            hashed_password=hashed_password,
-            is_admin=True
-        )
-        db.add(admin)
-        db.commit()
-    db.close()
-
-create_default_admin()
+        admin_doc = {
+            "username": "admin",
+            "email": "admin@example.com",
+            "hashed_password": hashed_password,
+            "is_admin": True,
+            "created_at": datetime.utcnow()
+        }
+        await database[USERS_COLLECTION].insert_one(admin_doc)
 
 # 挂载前端静态文件（必须在所有 API 路由之后）
 frontend_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
