@@ -34,3 +34,6 @@ Thumbs.db
 
 # CodeBuddy (本地集成配置)
 .codebuddy/
+
+# CloudStudio 部署配置 (沙盒数据)
+sandbox.json
