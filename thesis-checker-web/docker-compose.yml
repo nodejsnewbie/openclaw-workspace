@@ -1,39 +1,70 @@
-version: '3.8'
+version: '3.9'
+
+# 毕业论文检查系统 - 生产容器编排
+# 架构说明：
+#   - backend 绑定 127.0.0.1:8001（不直接对外，由宿主机 Nginx 反代）
+#   - mongodb 绑定 127.0.0.1:27017（不对外暴露）
+#   - 容器间通过 thesis_net 内部网络通信
 
 services:
   mongodb:
     image: mongo:6.0
     container_name: thesis-checker-mongodb
-    restart: always
+    restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    # 仅允许宿主机本地访问，供运维使用
+    ports:
+      - "127.0.0.1:27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok", "--username", "${MONGO_ROOT_USER:-admin}", "--password", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     networks:
-      - thesis-network
+      - thesis_net
 
   backend:
     build: ./backend
     container_name: thesis-checker-backend
-    restart: always
+    restart: unless-stopped
+    # 绑定本机，由宿主机 Nginx 反代（避免与 huali-edu 的 8000 端口冲突）
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
-      - ./backend:/app
-      - ./frontend/dist:/app/frontend/dist
+      - backend_data:/app/uploads
+      - backend_reports:/app/reports
     environment:
-      - MONGODB_URL=mongodb://admin:password123@mongodb:27017
-      - DATABASE_NAME=thesis_checker
-      - SECRET_KEY=your-production-secret-key-here
+      - MONGODB_URL=mongodb://${MONGO_ROOT_USER:-admin}:${MONGO_ROOT_PASSWORD}@mongodb:27017
+      - DATABASE_NAME=${DATABASE_NAME:-thesis_checker}
+      - SECRET_KEY=${SECRET_KEY}
+      - UPLOAD_DIR=/app/uploads
+      - REPORT_DIR=/app/reports
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
-      - thesis-network
+      - thesis_net
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -sf http://localhost:8000/docs > /dev/null && echo OK"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  thesis_net:
+    name: thesis_checker_network
+    driver: bridge
 
 volumes:
   mongodb_data:
-
-networks:
-  thesis-network:
-    driver: bridge
+    name: thesis_mongodb_data
+  backend_data:
+    name: thesis_backend_data
+  backend_reports:
+    name: thesis_backend_reports
